@@ -61,12 +61,15 @@ v2v <- m2v |> mutate(votos=as.numeric(VOTOS), cn=norm(CANNOMBRE),
 p26 <- readr::read_csv("datos/crudos/MMV_Cartagena Escrutinio.csv", col_types=cols(.default="c"), show_col_types=FALSE)
 names(p26) <- toupper(names(p26))
 
+# ---- 3) PROCESAMIENTO BLINDADO DE CARTAGENA (2026) ----
+p26 <- readr::read_csv("datos/crudos/MMV_Cartagena Escrutinio.csv", col_types=cols(.default="c"), show_col_types=FALSE)
+names(p26) <- toupper(names(p26))
+
 p26_procesado <- p26 |>
   mutate(
     votos = as.numeric(VOTOS),
     cod_puesto = paste0(str_pad(DEP,2,pad="0"), str_pad(MUN,3,pad="0"), str_pad(ZONA,2,pad="0"), str_pad(PUESTO,2,pad="0")),
     cn = norm(CANNOMBRE),
-    # Extracción robusta de Localidad basada en números o texto aproximado
     comuna_lbl = case_when(
       str_detect(norm(COMUNOMBRE), "1|HISTORICA") ~ "Localidad 1 Historica Y Del Caribe",
       str_detect(norm(COMUNOMBRE), "2|VIRGEN")     ~ "Localidad 2 De La Virgen Y Turistica",
@@ -76,6 +79,7 @@ p26_procesado <- p26 |>
   ) |>
   group_by(dep=str_pad(DEP,2,pad="0"), mun=str_pad(MUN,3,pad="0"), cod_puesto, comuna_lbl) |>
   summarise(
+    puesto_nom = first(PUESNOMBRE), # <-- ¡LÍNEA CLAVE: Captura el nombre directo de 2026!
     cep26 = sum(votos[str_detect(cn, "CEPEDA")], na.rm=TRUE),
     der26 = sum(votos[str_detect(cn, "ESPRIELLA|ABELARDO")], na.rm=TRUE),
     val26 = sum(votos[!str_detect(cn, "NULO|NO MARCAD")], na.rm=TRUE),
@@ -112,22 +116,18 @@ pts <- function(x) paste0(ifelse(x>=0,"+",""), format(round(x,1), decimal.mark="
 analizar <- function(slug){
   r <- resolver(slug); if(is.null(r)) return(NULL)
   d <- r$dep; mu <- r$mun
-  
-  a26 <- p26_procesado |> filter(dep==d, mun==mu)
+a26 <- p26_procesado |> filter(dep==d, mun==mu)
   a22 <- v22 |> filter(dep==d, mun==mu)
   
-# MODIFICACIÓN CLAVE: left_join para no perder puestos nuevos de 2026
+  # Combinar bases usando el nombre nativo de 2026
   pu <- a26 |> left_join(a22, by=c("dep","mun","cod_puesto")) |>
-    left_join(pnom, by="cod_puesto") |>
     mutate(
-      # Si el puesto es nuevo, asumimos un histórico proporcional para no perder el voto
       val22 = coalesce(val22, median(val22, na.rm=TRUE)),
       izq22 = coalesce(izq22, val22 * (sum(a22$izq22)/sum(a22$val22))),
       izq22p = izq22/val22, 
       izq26p = cep26/val26, 
       swing = izq26p - izq22p
     )
-    
   if(nrow(pu)<3) return(NULL)
   
   gm <- GEO |> filter(str_detect(mk, patron[[slug]]), str_detect(dk, norm(caps$depn[caps$slug==slug])))
