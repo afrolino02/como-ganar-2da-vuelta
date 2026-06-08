@@ -57,14 +57,23 @@ v2v <- m2v |> mutate(votos=as.numeric(VOTOS), cn=norm(CANNOMBRE),
 
 # A. Cargar Escrutinio Mesa a Mesa de Cartagena
 # Corregido: Ruta añadida a datos/crudos/
+# ---- 3) PROCESAMIENTO BLINDADO DE CARTAGENA (2026) ----
 p26 <- readr::read_csv("datos/crudos/MMV_Cartagena Escrutinio.csv", col_types=cols(.default="c"), show_col_types=FALSE)
 names(p26) <- toupper(names(p26))
 
 p26_procesado <- p26 |>
-  mutate(votos = as.numeric(VOTOS),
-         cod_puesto = paste0(str_pad(DEP,2,pad="0"), str_pad(MUN,3,pad="0"), str_pad(ZONA,2,pad="0"), str_pad(PUESTO,2,pad="0")),
-         cn = norm(CANNOMBRE),
-         comuna_lbl = str_to_title(str_replace(norm(COMUNOMBRE), "^(LOC\\.? *[0-9]* *|LOCALIDAD *[0-9]* *)", ""))) |>
+  mutate(
+    votos = as.numeric(VOTOS),
+    cod_puesto = paste0(str_pad(DEP,2,pad="0"), str_pad(MUN,3,pad="0"), str_pad(ZONA,2,pad="0"), str_pad(PUESTO,2,pad="0")),
+    cn = norm(CANNOMBRE),
+    # Extracción robusta de Localidad basada en números o texto aproximado
+    comuna_lbl = case_when(
+      str_detect(norm(COMUNOMBRE), "1|HISTORICA") ~ "Localidad 1 Historica Y Del Caribe",
+      str_detect(norm(COMUNOMBRE), "2|VIRGEN")     ~ "Localidad 2 De La Virgen Y Turistica",
+      str_detect(norm(COMUNOMBRE), "3|INDUSTRIAL|BAHIA") ~ "Localidad 3 Industrial Y De La Bahia",
+      TRUE ~ str_to_title(str_replace(norm(COMUNOMBRE), "^(LOC\\.? *[0-9]* *|LOCALIDAD *[0-9]* *)", ""))
+    )
+  ) |>
   group_by(dep=str_pad(DEP,2,pad="0"), mun=str_pad(MUN,3,pad="0"), cod_puesto, comuna_lbl) |>
   summarise(
     cep26 = sum(votos[str_detect(cn, "CEPEDA")], na.rm=TRUE),
@@ -73,7 +82,6 @@ p26_procesado <- p26 |>
     .groups = "drop"
   )
 
-# B. Cargar Consolidado Departamental de Bolívar
 # Corregido: Ruta añadida a datos/crudos/
 bolivar_muns <- readr::read_csv("datos/crudos/bolivar_ganadores.csv", show_col_types=FALSE)
 names(bolivar_muns) <- toupper(names(bolivar_muns))
@@ -108,9 +116,17 @@ analizar <- function(slug){
   a26 <- p26_procesado |> filter(dep==d, mun==mu)
   a22 <- v22 |> filter(dep==d, mun==mu)
   
-  pu <- a26 |> inner_join(a22, by=c("dep","mun","cod_puesto")) |>
+# MODIFICACIÓN CLAVE: left_join para no perder puestos nuevos de 2026
+  pu <- a26 |> left_join(a22, by=c("dep","mun","cod_puesto")) |>
     left_join(pnom, by="cod_puesto") |>
-    mutate(izq22p=izq22/val22, izq26p=cep26/val26, swing=izq26p-izq22p)
+    mutate(
+      # Si el puesto es nuevo, asumimos un histórico proporcional para no perder el voto
+      val22 = coalesce(val22, median(val22, na.rm=TRUE)),
+      izq22 = coalesce(izq22, val22 * (sum(a22$izq22)/sum(a22$val22))),
+      izq22p = izq22/val22, 
+      izq26p = cep26/val26, 
+      swing = izq26p - izq22p
+    )
     
   if(nrow(pu)<3) return(NULL)
   
