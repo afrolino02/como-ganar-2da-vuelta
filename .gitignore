@@ -11,7 +11,7 @@ _serve.R
 *.topojson
 co_adm2.geojson
 *_test.*
-
+datos/crudos/*
 # Documentos solo-PDF y datos en claro (NO publicar como web)
 bogota-campana-v2/metodologia.html
 bogota-campana-v2/metodologia.app.js
