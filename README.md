@@ -85,3 +85,22 @@ magenta **#874088**; tipografía **Nunito Sans**. Para el logo oficial, deja `we
 - **No incluye** sexo ni puntos de flujo (decisión del proyecto). Análisis **por territorio**, no por persona.
 
 Fuentes: Registraduría Nacional (resultados por puesto 2022 y 2026) · Datos Abiertos (georreferenciación de puestos `mv2e-prx5`) · cartografía oficial.
+# NOTA MIA 
+> [!NOTE]
+> Se ha omitido el análisis de 19 ciudades debido a la falta de datos de georreferenciación. Los datos de puestos para estas ciudades no se encuentran disponibles en la base de datos de la Registraduría Nacional
+> Se ha modificado el script de datos para que solo se tengan en cuenta los datos de las ciudades con datos de georreferenciación disponibles.
+
+## Para poder agregar las otras ciudades, se necesita:
+- Datos ofrecidos por la Registraduría Nacional de Colombia.
+- Datos ofrecidos por Datos Abiertos (georreferenciación de puestos).
+- Datos ofrecidos por el DANE (perfil etario por ciudad).
+
+Instalar dependencias en R:
+```r
+install.packages(c("tidyverse", "jsonlite", "sf"))
+```
+
+Ejecutar script:
+```r
+source("build_data.R")
+```
